@@ -4,14 +4,14 @@
 // lexer types
 enum { 
     // literals
-    FN_SYM, IF_SYM, ELSE_SYM, DO_SYM, END_SYM, CALL_SYM, ID, INT,
+    FN_SYM, IF_SYM, ELSE_SYM, DO_SYM, END_SYM, RET_SYM, ID, INT,
 
     // symbols
-    LBRA, RBRA, LPAR, RPAR, SEMI,
+    LBRA, RBRA, LPAR, RPAR, SEMI, COMMA,
 
     // operators
     PLUS, MINUS, STAR, SLASH, EQUAL, EQEQ,
-    BANG, BANGEQ,
+    BANG, BANGEQ, 
 
     // other
     EOI,

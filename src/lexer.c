@@ -19,7 +19,7 @@ int is_alpha(int x) {
 /* Lexer */
 
 char *words[] = {
-    "fn", "if", "else", "do", "end", "call", NULL
+    "fn", "if", "else", "do", "end", "return", NULL
 };
 
 lexer *new_lexer() {
@@ -79,6 +79,7 @@ int next_sym(lexer *l) {
         case '(': next_ch(l); l->peek.sym = LPAR; break;
         case ')': next_ch(l); l->peek.sym = RPAR; break;
         case ';': next_ch(l); l->peek.sym = SEMI; break;
+        case ',': next_ch(l); l->peek.sym = COMMA; break;
         case '+': next_ch(l); l->peek.sym = PLUS; break;
         case '-': next_ch(l); l->peek.sym = MINUS; break;
         case '*': next_ch(l); l->peek.sym = STAR; break;

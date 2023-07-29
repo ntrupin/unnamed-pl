@@ -7,6 +7,7 @@ enum {
     ADD, SUB, MUL, DIV, SET, EQ, NOT, NEQ,
 
     ROOT, EMPTY, FN, IF1, IF2, SEQ, EXPR, CST, VAR, CALL,
+    RETURN,
 };
 
 // associativity

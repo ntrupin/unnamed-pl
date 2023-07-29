@@ -40,7 +40,33 @@ void free_node(node *n) {
     n = NULL;
 }
 
-char *op_words[] = {
+
+// operator precedence table
+const int op_precs[] = {
+    [EQUAL] = 2,
+    [EQEQ] = 9,
+    [BANGEQ] = 9,
+    [PLUS] = 12,
+    [MINUS] = 12,
+    [STAR] = 13,
+    [SLASH] = 13,
+    [BANG] = 14,
+};
+
+// operator associativity table
+const int op_assocs[] = {
+    [EQUAL] = RIGHT,
+    [EQEQ] = LEFT,
+    [BANGEQ] = LEFT,
+    [PLUS] = LEFT,
+    [MINUS] = LEFT,
+    [STAR] = LEFT,
+    [SLASH] = LEFT,
+    [BANG] = RIGHT,
+};
+
+// operator words (for printing)
+const char *op_words[] = {
     "add", "sub", "mul", "div", "set", "eq", "not", "neq"
 };
 
@@ -54,11 +80,20 @@ void print_node(node *n, int s) {
         }
         case FN: {
             printf("%*sfn %s\n", s, "", n->id_val);
+            printf("%*sargs\n", s, "");
             print_node(n->o1, s + 2);
+            printf("%*sbody\n", s, "");
+            print_node(n->o2, s + 2);
             break;
         }
         case CALL: {
             printf("%*scall %s\n", s, "", n->id_val);
+            print_node(n->o1, s + 2);
+            break;
+        }
+        case RETURN: {
+            printf("%*sreturn\n", s, "");
+            print_node(n->o1, s + 2);
             break;
         }
         case IF1: {
@@ -96,62 +131,67 @@ void print_node(node *n, int s) {
 
 #define advance if (!next_sym(l)) goto err;
 
-// operator precedence table
-int op_precs[] = {
-    [EQUAL] = 2,
-    [EQEQ] = 9,
-    [BANGEQ] = 9,
-    [PLUS] = 12,
-    [MINUS] = 12,
-    [STAR] = 13,
-    [SLASH] = 13,
-    [BANG] = 14,
-};
-
-// operator associativity table
-int op_assocs[] = {
-    [EQUAL] = RIGHT,
-    [EQEQ] = LEFT,
-    [BANGEQ] = LEFT,
-    [PLUS] = LEFT,
-    [MINUS] = LEFT,
-    [STAR] = LEFT,
-    [SLASH] = LEFT,
-    [BANG] = RIGHT,
-};
-
 // binop check
 int is_binop(int x) {
     return x >= PLUS && x < EOI;
 }
 
 node *paren_expr(lexer *);
+node *statement(lexer *);
+node *expr(lexer *);
+node *list(lexer *, node *(lexer *), int, int);
 
-// <primary> = <id>
-//           | <int>
-//           | "(" <expr> ")"
-node *primary(lexer *l) {
+// <id> = identifier
+node *id(lexer *l) {
     node *n = NULL;
     int el = l->line, ec = l->col;
+
     if (l->sym == ID) {
-        // variable
         n = new_node(VAR);
         strcpy(n->id_val, l->id_val);
-    } else if (l->sym == CALL_SYM) {
-        // function call
-        n = new_node(CALL);
-    
-        // name
-        advance;
-        if (l->sym != ID) {
-            syntax_error(l->line, l->col, "expected ident");
+    } else {
+        syntax_error(el, ec, "unexpected symbol");
+        goto err;
+    }
+
+    advance;
+
+    return n;
+
+err:
+    syntax_error(el, ec, "in ID");
+    free_node(n);
+    return NULL;
+}
+
+// <primary> = <id>
+//           | <id> <list<expr>>
+//           | <int>
+//           | <paren_expr>
+node *primary(lexer *l) {
+    node *n = NULL, *n2 = NULL;
+    int el = l->line, ec = l->col;
+
+    if (l->sym == ID) {
+        // variable or func call
+        if ((n = id(l)) == NULL)
             goto err;
+
+        // arg list
+        if (l->sym == LPAR) {
+            n->type = CALL;
+
+            // arg list
+            if ((n->o1 = list(l, expr, LPAR, RPAR)) == NULL)
+                goto err;
+
+            advance;
         }
-        strcpy(n->id_val, l->id_val);
     } else if (l->sym == INT) {
         // constant (int)
         n = new_node(CST);
         n->int_val = l->int_val;
+        advance;
     } else
         if ((n = paren_expr(l)) == NULL)
             goto err;
@@ -161,6 +201,7 @@ node *primary(lexer *l) {
 err:
     syntax_error(el, ec, "in PRIMARY");
     free_node(n);
+    free_node(n2);
     return NULL;
 }
 
@@ -170,18 +211,17 @@ node *expr_1(lexer *l, node *lhs, int min_p) {
     int el = l->line, ec = l->col;
     int op, look;
 
-    look = l->peek.sym;
+    look = l->sym;
 
     while (is_binop(look) && op_precs[look] > min_p) {
         op = look;
 
         // rhs
         advance;
-        advance;
         if ((rhs = primary(l)) == NULL)
             goto err;
 
-        look = l->peek.sym;
+        look = l->sym;
         while (is_binop(look)
             && (op_precs[look] > op_precs[op]
             || (op_assocs[look] == RIGHT && 
@@ -189,7 +229,7 @@ node *expr_1(lexer *l, node *lhs, int min_p) {
             int prec_add = op_precs[look] > op_precs[op] ? 1 : 0;
             if ((rhs = expr_1(l, rhs, op_precs[op] + prec_add)) == NULL)
                 goto err;
-            look = l->peek.sym;
+            look = l->sym;
         }
         // aligned enums, just subtract
         t = new_node(op - PLUS);
@@ -213,7 +253,6 @@ err:
 // recursive-descent for mathematical expressions.
 node *expr(lexer *l) {
     node *n = expr_1(l, primary(l), 0);
-    advance;
     return n;
 err:
     free_node(n);
@@ -253,6 +292,7 @@ err:
 
 // <statement> = "if" <paren_expr> <statement>
 //             | "if" <paren_expr> <statement> "else" <expr>
+//             | "return" <statement>
 //             | "do" { <statement> } "end"
 //             | <expr>
 node *statement(lexer *l) {
@@ -291,6 +331,13 @@ node *statement(lexer *l) {
                 goto err;
         }
         advance;
+    } else if (l->sym == RET_SYM) {
+        n = new_node(RETURN);
+
+        // ret expr
+        advance;
+        if ((n->o1 = statement(l)) == NULL)
+            goto err;
     } else {
         n = new_node(EXPR);
 
@@ -298,6 +345,7 @@ node *statement(lexer *l) {
         if ((n->o1 = expr(l)) == NULL)
             goto err;
     }
+
     return n;
 
 err:
@@ -307,6 +355,7 @@ err:
 }
 
 // <block> = "fn" <id> "(" ")" <statement> 
+//         | <statement>
 node *block(lexer *l) {
     node *n = NULL;
 
@@ -323,10 +372,14 @@ node *block(lexer *l) {
         }
         strcpy(n->id_val, l->id_val);
 
+        // arg list
+        advance;
+        if ((n->o1 = list(l, id, LPAR, RPAR)) == NULL)
+            goto err;
 
         // function body
         advance;
-        if ((n->o1 = statement(l)) == NULL)
+        if ((n->o2 = statement(l)) == NULL)
             goto err;
 
     } else
@@ -341,7 +394,47 @@ err:
     return NULL;
 }
 
-// <program> = <block>
+// <list<f>> = "<start>" [ <f> { "," <f> } ] "<end>"
+node *list(lexer *l, node *(f)(lexer *), int start, int end) {
+    node *n = NULL, *n2 = NULL;
+    int el = l->line, ec = l->col;
+
+    // check start sym
+    if (l->sym != start) {
+        syntax_error(el, ec, "missing start of list");
+        goto err;
+    }
+
+    // init node
+    n = new_node(EMPTY);
+
+    advance;
+    while (l->sym != end) {
+        n2 = n;
+        n = new_node(SEQ);
+        n->o1 = n2;
+
+        // item
+        if ((n->o2 = f(l)) == NULL)
+            goto err;
+
+        // check for comma or end
+        if (l->sym == COMMA) {
+            advance;
+        } else if (l->sym != COMMA && l->sym != end) {
+            syntax_error(el, ec, "unexpected end of arg list");
+            goto err;
+        }
+    }
+
+    return n;
+err:
+    syntax_error(el, ec, "in LIST");
+    free_node(n);
+    return NULL;
+}
+
+// <program> = { <block> }
 node *program() {
     node *n = NULL, *n2 = NULL;
 
@@ -361,10 +454,10 @@ node *program() {
 
     advance;
     while (l->sym != EOI) {
-        n2 = n;
-        n = new_node(SEQ);
-        n->o1 = n2;
-        if ((n->o2 = block(l)) == NULL)
+        n2 = n->o1;
+        n->o1 = new_node(SEQ);
+        n->o1->o1 = n2;
+        if ((n->o1->o2 = block(l)) == NULL)
             goto err;
     }
 

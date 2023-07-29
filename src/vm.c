@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include "vm.h"
 #include "gen.h"
+#include "instr.h"
 
 #define r(x) fread(&x, sizeof(x), 1, f)
 int vm(char *in) {
