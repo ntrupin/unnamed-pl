@@ -1,0 +1,9 @@
+<program> = <block>
+<block> = "fn" <id> <statement>
+<statement> = "if" <paren_expr> "then" <statement>
+            | "if" <paren_expr> <statement> "else" <statement>
+            | "do" { <statement> } "end"
+            | <expr> ";"
+<paren_expr> = "(" <expr> ")"
+<expr> = <test> | <id> = <expr>
+<test> = <expr> (">"|"<") <expr>

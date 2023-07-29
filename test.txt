@@ -1,0 +1,10 @@
+fn main do
+    a = 4
+    b = 5
+    c = a * b
+    if (c == 20) do
+        call main
+    end
+end
+
+call main
